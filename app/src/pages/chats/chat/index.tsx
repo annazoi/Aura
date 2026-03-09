@@ -1,5 +1,4 @@
 import {
-	IonAvatar,
 	IonBackButton,
 	IonButton,
 	IonButtons,
@@ -11,24 +10,24 @@ import {
 	IonIcon,
 	IonPage,
 	IonProgressBar,
+	IonText,
 	IonToolbar,
 	useIonRouter,
 } from '@ionic/react';
-// import EmojiPicker from 'emoji-picker-react';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import {
 	arrowBack,
-	send,
-	peopleOutline,
-	informationOutline,
-	ellipsisHorizontalOutline,
-	trashBinOutline,
 	cameraOutline,
 	imageOutline,
 	call,
 	videocam,
+	trashBinOutline,
+	peopleOutline,
+	informationCircleOutline,
+	send,
+	ellipsisHorizontal,
 } from 'ionicons/icons';
-import { RiRobot2Line } from 'react-icons/ri';
+import { RiRobot2Line, RiMicLine, RiAddLine } from 'react-icons/ri';
 import { getChat, sendMessage, deleteChat, readMessage } from '../../../services/chat';
 import { useMutation } from '@tanstack/react-query';
 import { useParams } from 'react-router';
@@ -38,13 +37,12 @@ import { useSocket } from '../../../hooks/sockets';
 import MessageBox from './MessageBox';
 import ringtonePlayer from '/ringtone.mp3';
 import userDefaulfAvatar from '../../../assets/user.png';
+import groupDefaulfAvatar from '../../../assets/group.png';
 import { useWebRTC } from '../../../hooks/webrtc';
-
-import './style.css';
 import Modal from '../../../components/ui/Modal';
 import ChatOptions from '../../../components/ChatOptions';
-import Title from '../../../components/ui/Title';
 import AiTools from './openAi';
+import './style.css';
 
 const Chat: React.FC = () => {
 	const { chatId } = useParams<{ chatId: string }>();
@@ -56,12 +54,8 @@ const Chat: React.FC = () => {
 	const [openOptions, setOpenOptions] = useState<boolean>(false);
 	const [openAiOptions, setOpenAiOptions] = useState<boolean>(false);
 	const [chat, setChat] = useState<any>(null);
-	const [isRunning, setIsRunning] = useState(true);
 	const [isLoading, setIsLoading] = useState(false);
-	const [openTakePicture, setOpenTakePicture] = useState(false);
 	const [image, setImage] = useState<string>('');
-	const [newImage, setNewImage] = useState<string>('');
-	const [openEmoji, setOpenEmoji] = useState<boolean>(false);
 	const [page, setPage] = useState(1);
 	const [hasMore, setHasMore] = useState(true);
 	const [isLoadingOlder, setIsLoadingOlder] = useState(false);
@@ -83,7 +77,6 @@ const Chat: React.FC = () => {
 		acceptCall,
 		rejectCall,
 		endCall,
-		toggleMute,
 		flipCamera,
 	} = useWebRTC({
 		socket,
@@ -93,50 +86,24 @@ const Chat: React.FC = () => {
 		ringtoneSrc: ringtonePlayer,
 	});
 
-	useEffect(() => {
-		const unlockAudio = () => {
-			const a = new Audio();
-			a.play().catch(() => {});
-			document.removeEventListener('touchstart', unlockAudio);
-			document.removeEventListener('click', unlockAudio);
-		};
-
-		document.addEventListener('touchstart', unlockAudio, { once: true });
-		document.addEventListener('click', unlockAudio, { once: true });
-	}, []);
-
-	const startAudioCall = () => startCall('audio');
-	const startVideoCall = () => startCall('video');
-
 	const { mutate: readMessageMutate } = useMutation({
 		mutationFn: ({ chatId, messageId }: any) => readMessage(chatId, messageId),
 	});
 
 	const { mutate: mutateChat } = useMutation({
 		mutationFn: ({ chatId, page = 1 }: any) => getChat(chatId, page),
-		onSuccess: async (res: any, variables: any) => {
+		onSuccess: (res: any, variables: any) => {
 			const requestedPage = variables?.page ?? 1;
-
 			setChat(res?.chat);
 			if (requestedPage === 1) {
 				setMessages(res?.chat?.messages || []);
-				setTimeout(() => {
-					contentRef.current?.scrollToBottom(300);
-				}, 50);
+				setTimeout(() => contentRef.current?.scrollToBottom(300), 100);
 			} else {
 				setMessages((prev) => [...(res?.chat?.messages || []), ...prev]);
 			}
-
 			setHasMore(Boolean(res.hasMore));
-
-			if (res?.chat?.messages?.length > 0) {
-				const lastMsg = res.chat.messages[res.chat.messages.length - 1];
-				if (lastMsg && lastMsg.senderId?._id !== userId && !lastMsg.read) {
-					readMessageMutate({ chatId, messageId: lastMsg._id });
-				}
-			}
-
 			setIsLoading(false);
+			setIsLoadingOlder(false);
 		},
 		onError: () => {
 			setIsLoading(false);
@@ -144,441 +111,220 @@ const Chat: React.FC = () => {
 		},
 	});
 
-	const { mutate, isLoading: messageIsLoading } = useMutation({
-		mutationFn: ({ chatId, newMessage, image }: any) => sendMessage({ chatId, newMessage, image }),
+	const { mutate: mutateSendMessage, isLoading: messageIsLoading } = useMutation({
+		mutationFn: (args: any) => sendMessage(args),
+		onSuccess: (res: any) => {
+			const messageData = { ...res.chat.messages[res.chat.messages.length - 1], room: chatId };
+			socket?.emit('send_message', messageData);
+			setMessages((prev) => [...prev, messageData]);
+			setNewMessage('');
+			setImage('');
+			setTimeout(() => contentRef.current?.scrollToBottom(300), 50);
+		},
 	});
-
-	const { mutate: mutateDeleteChat } = useMutation({
-		mutationFn: ({ chatId }: any) => deleteChat(chatId),
-	});
-
-	const deletedChat = () => {
-		mutateDeleteChat(
-			{ chatId },
-			{
-				onSuccess: () => {
-					router.push('/inbox', 'forward', 'replace');
-				},
-				onError: (error: any) => {
-					console.log('error', error);
-				},
-			}
-		);
-	};
 
 	const handleNewMessage = () => {
-		if (newMessage === '' && !image) return;
-		mutate(
-			{ chatId, newMessage, image },
-			{
-				onSuccess: (res: any) => {
-					const messageData = {
-						...res.chat.messages[res.chat.messages.length - 1],
-						room: chatId,
-					};
-					socket?.emit('send_message', messageData);
-					setMessages((prevMessages) => [...prevMessages, messageData]);
-					contentRef?.current?.scrollToBottom();
-					setNewMessage('');
-					setImage('');
-				},
-				onError: (error: any) => {
-					console.log('error', error);
-				},
-			}
-		);
+		if (newMessage.trim() === '' && !image) return;
+		mutateSendMessage({ chatId, newMessage, image });
 	};
 
-	const handleEnterPress = (event: React.KeyboardEvent<HTMLInputElement>) => {
-		if (event.key === 'Enter') {
-			handleNewMessage();
-		}
-	};
-
-	const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-		const { value } = event.target;
-		setIsRunning(value.length > 0);
-		setNewMessage(value);
-	};
-
-	const getAvatar = () => {
-		const member = chat?.members?.find((member: any) => member._id !== userId);
-		if (!member?.avatar) {
-			return userDefaulfAvatar;
-		}
-		return member.avatar;
-	};
-
-	const getName = (chat: any) => {
-		if (chat.type === 'private') {
-			const member = chat?.members?.find((member: any) => member._id !== userId);
-			return member?.username ?? '';
-		} else {
-			return chat.name;
+	const handleScroll = async (e: any) => {
+		if (e.detail.scrollTop < 100 && hasMore && !isLoadingOlder) {
+			const nextPage = page + 1;
+			setIsLoadingOlder(true);
+			mutateChat({ chatId, page: nextPage });
+			setPage(nextPage);
 		}
 	};
 
 	const handleGallery = async () => {
-		const image = await Camera.getPhoto({
+		const photo = await Camera.getPhoto({
 			quality: 90,
-			allowEditing: false,
 			resultType: CameraResultType.DataUrl,
 			source: CameraSource.Photos,
 		});
-
-		const imageUrl = image.dataUrl || '';
-		setImage(imageUrl);
-		return imageUrl;
+		if (photo.dataUrl) setImage(photo.dataUrl);
 	};
 
 	const handleCamera = async () => {
-		const image = await Camera.getPhoto({
+		const photo = await Camera.getPhoto({
 			quality: 90,
-			allowEditing: false,
 			resultType: CameraResultType.DataUrl,
 			source: CameraSource.Camera,
 		});
-
-		const imageUrl = image.dataUrl || '';
-		setImage(imageUrl);
-		return imageUrl;
-	};
-
-	const handleScroll = async (e: CustomEvent) => {
-		const scrollTop = e.detail.scrollTop;
-		if (scrollTop < 100 && hasMore && !isLoadingOlder) {
-			setIsLoadingOlder(true);
-			const nextPage = page + 1;
-
-			const scrollEl = await contentRef.current?.getScrollElement();
-			const prevHeight = scrollEl?.scrollHeight ?? 0;
-
-			mutateChat(
-				{ chatId, page: nextPage },
-				{
-					onSuccess: async () => {
-						setPage(nextPage);
-						setIsLoadingOlder(false);
-
-						requestAnimationFrame(async () => {
-							const newHeight = scrollEl?.scrollHeight ?? 0;
-							const delta = newHeight - prevHeight;
-							if (delta > 0) {
-								await contentRef.current?.scrollToPoint(0, delta, 0);
-							}
-						});
-					},
-					onError: () => {
-						setIsLoadingOlder(false);
-					},
-				}
-			);
-		}
+		if (photo.dataUrl) setImage(photo.dataUrl);
 	};
 
 	useEffect(() => {
 		if (!socket || !chatId) return;
 		socket.emit('join_room', chatId);
-	}, [socket, chatId]);
-
-	useEffect(() => {
-		if (!socket) return;
-
-		const handleReceive = (message: any) => {
-			setMessages((prevMessages) => [...prevMessages, message]);
-		};
-
+		const handleReceive = (msg: any) => setMessages((prev) => [...prev, msg]);
 		socket.on('receive_message', handleReceive);
-
 		return () => {
 			socket.off('receive_message', handleReceive);
 		};
-	}, [socket]);
+	}, [socket, chatId]);
 
 	useEffect(() => {
 		setIsLoading(true);
-		setPage(1);
 		mutateChat({ chatId, page: 1 });
 	}, [chatId]);
 
-	useEffect(() => {
-		if (messages.length === 0) return;
-		setTimeout(() => {
-			contentRef.current?.scrollToBottom(300);
-		}, 100);
-	}, [messages.length]);
+	const otherMember = chat?.members?.find((m: any) => m._id !== userId);
+	const chatName = chat?.type === 'private' ? otherMember?.username : chat?.name;
+	const chatAvatar = chat?.type === 'private' ? otherMember?.avatar : chat?.avatar;
+	const defaultAvatar = chat?.type === 'private' ? userDefaulfAvatar : groupDefaulfAvatar;
 
-	// ----------------- JSX -----------------
 	return (
 		<IonPage>
-			<IonHeader>
+			<IonHeader className="chat-header ion-no-border bg-modern">
 				<IonToolbar>
 					<IonButtons slot="start">
-						<IonBackButton
-							defaultHref="/inbox"
-							style={{
-								color: 'white',
-							}}
-						>
-							<IonIcon icon={arrowBack} size="medium"></IonIcon>
-						</IonBackButton>
+						<IonBackButton defaultHref="/inbox" icon={arrowBack} text="" />
 					</IonButtons>
-
 					{chat && (
-						<div
-							className="chat-bar"
-							color="secondary"
-							style={{
-								display: 'flex',
-								marginLeft: '.5rem',
-							}}
-						>
-							<IonAvatar class="chat-user-avatar">
-								{chat.type === 'private' && <img src={getAvatar()} alt="user image" />}
-								{chat.avatar && chat.type === 'group' && <img src={chat.avatar} alt="group image" />}
-							</IonAvatar>
-
-							<Title title={getName(chat)} className="ion-padding" />
+						<div className="chat-header-container">
+							<img src={chatAvatar || defaultAvatar} alt="Avatar" className="chat-header-avatar" />
+							<div className="chat-header-info">
+								<IonText className="chat-header-name">{chatName}</IonText>
+								<IonText className="chat-header-status">online</IonText>
+							</div>
 						</div>
 					)}
+					<IonButtons slot="end">
+						<IonButton onClick={() => setOpenAiOptions(true)}>
+							<RiRobot2Line size={22} style={{ color: 'white', opacity: 0.9 }} />
+						</IonButton>
+					</IonButtons>
 				</IonToolbar>
 			</IonHeader>
 
 			{isLoading && <IonProgressBar type="indeterminate" />}
-			<IonContent ref={contentRef} className="ion-padding-top" scrollEvents={true} onIonScroll={handleScroll}>
-				{isLoadingOlder && <div style={{ textAlign: 'center', padding: '8px 0' }}>Loading older messages...</div>}
-				{messages &&
-					messages.map((message: any, index: number) => {
-						const isMine = userId === message.senderId._id;
-						return (
-							<div
-								key={index}
-								style={{
-									display: 'flex',
-									flexDirection: isMine ? 'row-reverse' : 'row',
-									alignSelf: isMine ? 'flex-end' : 'flex-start',
-								}}
-							>
-								<img
-									src={message.senderId.avatar ? message.senderId.avatar : userDefaulfAvatar}
-									style={{
-										borderRadius: '100%',
-										height: '20px',
-										width: '20px',
-										margin: '10px',
-										marginTop: '15px',
-										backgroundColor: 'white',
-										objectFit: 'cover',
-									}}
-									alt="user"
-								/>
 
-								<MessageBox message={message} image={image} chatId={chatId} />
-							</div>
-						);
-					})}
+			<IonContent ref={contentRef} scrollEvents={true} onIonScroll={handleScroll} className="chat-content">
+				<div className="message-list-container">
+					{messages?.map((msg: any, i: number) => (
+						<MessageBox key={msg._id || i} message={msg} chatId={chatId} />
+					))}
+				</div>
 			</IonContent>
 
-			{/* Input / send area */}
-			<div
-				style={{
-					justifyItems: 'flex-end',
-					boxShadow: '0px 0px 0px 0px var(--ion-color-primary)',
-					display: 'flex',
-					backgroundColor: 'var(--ion-color-secondary)',
-					paddingRight: '.2rem',
-				}}
-			>
-				<input
-					type="text"
-					value={newMessage}
-					placeholder="Aa..."
-					onKeyUp={handleEnterPress}
-					onChange={handleInputChange}
-					className="new-message-input"
-				/>
-				<IonButton
-					onClick={handleNewMessage}
-					expand="block"
-					color="primary"
-					style={{
-						margin: '.5rem',
-					}}
-				>
-					<IonIcon
-						icon={messageIsLoading ? ellipsisHorizontalOutline : send}
-						style={{
-							margin: '0 auto',
-							color: 'white',
-						}}
+			{/* Custom Input Bar */}
+			<div className="chat-input-toolbar">
+				{image && (
+					<div style={{ position: 'relative', marginBottom: '8px', width: '80px' }}>
+						<img src={image} style={{ width: '80px', borderRadius: '12px' }} alt="Pending" />
+						<IonButton
+							size="small"
+							color="danger"
+							fill="clear"
+							onClick={() => setImage('')}
+							style={{ position: 'absolute', top: '-10px', right: '-10px' }}
+						>
+							<IonIcon icon={trashBinOutline} />
+						</IonButton>
+					</div>
+				)}
+				<div className="chat-input-container">
+					<IonButton className="input-action-btn" fill="clear" onClick={handleGallery}>
+						<RiAddLine size={24} />
+					</IonButton>
+					<input
+						className="message-input"
+						placeholder="Start typing..."
+						value={newMessage}
+						onChange={(e) => setNewMessage(e.target.value)}
+						onKeyDown={(e) => e.key === 'Enter' && handleNewMessage()}
 					/>
-				</IonButton>
-				<IonButton onClick={handleGallery} className="ion-no-margin new-message-snd-btns" size="small">
-					<IonIcon icon={imageOutline} color="white" size="small" />
-				</IonButton>
-				<IonButton onClick={handleCamera} className="ion-no-margin new-message-snd-btns" size="small">
-					<IonIcon icon={cameraOutline} size="small" color="white" />
-				</IonButton>
-				<IonButton
-					className="ion-no-margin new-message-snd-btns"
-					size="small"
-					onClick={() => setOpenAiOptions(true)}
-				>
-					<RiRobot2Line size={18} />
-				</IonButton>
+					{newMessage.trim() === '' && !image ? (
+						<IonButton className="input-action-btn" fill="clear" onClick={handleCamera}>
+							<RiMicLine size={24} />
+						</IonButton>
+					) : (
+						<IonButton className="send-btn" disabled={messageIsLoading} onClick={handleNewMessage}>
+							<IonIcon icon={messageIsLoading ? ellipsisHorizontal : send} />
+						</IonButton>
+					)}
+				</div>
 			</div>
 
-			<Modal
-				isOpen={openAiOptions}
-				onClose={setOpenAiOptions}
-				title="AI Tools"
-				closeModal={() => setOpenAiOptions(false)}
-			>
-				<AiTools chatId={chatId}></AiTools>
-			</Modal>
-
-			<Modal
-				isOpen={openOptions}
-				onClose={setOpenOptions}
-				title="Members"
-				closeModal={() => {
-					setOpenOptions(false);
-				}}
-			>
-				<ChatOptions
-					closeModal={() => {
-						setOpenOptions(false);
-					}}
-					chat={chat}
-					isLoading={isLoading}
-				/>
-			</Modal>
-
-			{/* FAB για κλήσεις */}
-			<IonFab
-				slot="fixed"
-				horizontal="end"
-				style={{
-					marginRight: '3rem',
-				}}
-			>
-				<IonFabButton size="small" color="secondary">
-					<IonIcon
-						icon={call}
-						style={{
-							color: 'white',
-						}}
-					/>
+			{/* Floating Actions */}
+			<IonFab slot="fixed" vertical="bottom" horizontal="end" className="chat-fab-group">
+				<IonFabButton size="small" color="primary">
+					<IonIcon icon={ellipsisHorizontal} />
 				</IonFabButton>
-				<IonFabList side="bottom">
-					<IonFabButton onClick={startAudioCall}>
-						<IonIcon icon={call} color="primary" />
-					</IonFabButton>
-					<IonFabButton onClick={startVideoCall} style={{ transition: 'all 0.3s ease-in-out' }}>
-						<IonIcon icon={videocam} color="primary" />
-					</IonFabButton>
-				</IonFabList>
-			</IonFab>
-
-			{/* FAB για πληροφορίες / delete / μέλη */}
-			<IonFab slot="fixed" horizontal="end">
-				<IonFabButton size="small" color="secondary">
-					<IonIcon
-						icon={informationOutline}
-						style={{
-							color: 'white',
-						}}
-					/>
-				</IonFabButton>
-				<IonFabList side="bottom">
-					<IonFabButton
-						onClick={deletedChat}
-						style={{
-							transition: 'all 0.3s ease-in-out',
-						}}
-						routerLink="/inbox"
-					>
-						<IonIcon icon={trashBinOutline} color="primary" />
+				<IonFabList side="top">
+					<IonFabButton onClick={() => setOpenOptions(true)} color="primary">
+						<IonIcon icon={informationCircleOutline} />
 					</IonFabButton>
 					{chat?.type === 'group' && (
-						<IonFabButton
-							onClick={() => {
-								setOpenOptions(!openOptions);
-							}}
-						>
-							<IonIcon icon={peopleOutline} color="primary" />
+						<IonFabButton onClick={() => setOpenOptions(true)} color="primary">
+							<IonIcon icon={peopleOutline} />
 						</IonFabButton>
 					)}
+					<IonFabButton onClick={() => startVideoCall()} className="call-fab">
+						<IonIcon icon={videocam} />
+					</IonFabButton>
+					<IonFabButton onClick={() => startAudioCall()} className="call-fab">
+						<IonIcon icon={call} />
+					</IonFabButton>
 				</IonFabList>
 			</IonFab>
 
-			{incomingCall && (
-				<div className="incoming-call-container">
-					<div className="popup">
-						{chat?.type === 'private' && incomingCall.fromUser.avatar ? (
-							<img src={incomingCall.fromUser.avatar} className="incoming-call-avatar" />
-						) : (
-							<img src={userDefaulfAvatar} className="incoming-call-avatar" />
-						)}
-
-						<h2>{incomingCall.fromUser.username} is calling...</h2>
-
-						<IonButton onClick={acceptCall} color="success">
-							Accept
-						</IonButton>
-						<IonButton onClick={rejectCall} color="danger">
-							Reject
-						</IonButton>
+			{/* Call UI - Overhauled Overlay */}
+			{(incomingCall || inCall) && (
+				<div className="call-overlay">
+					<div className="call-header">
+						<img src={chatAvatar || defaultAvatar} className="call-avatar-large" alt="User" />
+						<div className="call-user-name">{chatName}</div>
+						<div className="call-status-text">
+							{incomingCall
+								? 'Incoming call...'
+								: inCall && callType === 'video'
+									? 'Video call active'
+									: 'Audio call active'}
+						</div>
 					</div>
-				</div>
-			)}
 
-			{inCall && callType === 'video' && (
-				<div className="video-call-ui">
-					<video ref={localVideoRef} autoPlay muted playsInline className="local-video" />
-					<video ref={remoteVideoRef} autoPlay playsInline className="remote-video" />
-
-					<div className="call-controls">
-						{/* Αν θες mute, ξε-κάνε comment αυτό */}
-						{/* <IonButton onClick={toggleMute} color="secondary">
-							{isMicMuted ? 'Unmute' : 'Mute'}
-						</IonButton> */}
-
-						<IonButton onClick={flipCamera} color="secondary">
-							Flip
-						</IonButton>
-
-						<IonButton onClick={() => endCall(true)} color="danger">
-							End
-						</IonButton>
-					</div>
-				</div>
-			)}
-
-			{inCall && callType === 'audio' && (
-				<div className="audio-call-ui">
-					{chat?.type === 'private' && chat?.members?.find((member: any) => member._id === userId)?.avatar ? (
-						<img
-							src={chat?.members?.find((member: any) => member._id === userId)?.avatar}
-							className="audio-call-avatar"
-						/>
-					) : (
-						<img src={userDefaulfAvatar} className="audio-call-avatar" />
+					{inCall && callType === 'video' && (
+						<div style={{ position: 'absolute', inset: 0, zIndex: -1 }}>
+							<video ref={remoteVideoRef} autoPlay playsInline className="video-view-remote" />
+							<video ref={localVideoRef} autoPlay muted playsInline className="video-view-local" />
+						</div>
 					)}
 
-					<audio ref={localAudioRef} autoPlay muted />
-					<audio ref={remoteAudioRef} autoPlay />
-
-					<div className="call-controls">
-						{/* <IonButton onClick={toggleMute} color="secondary">
-							{isMicMuted ? 'Unmute' : 'Mute'}
-						</IonButton> */}
-						<IonButton onClick={() => endCall(true)} color="danger">
-							End
-						</IonButton>
+					<div className="call-actions-row">
+						{incomingCall ? (
+							<>
+								<IonButton onClick={acceptCall} color="success" className="call-btn-circle">
+									<IonIcon icon={call} />
+								</IonButton>
+								<IonButton onClick={rejectCall} color="danger" className="call-btn-circle">
+									<IonIcon icon={trashBinOutline} />
+								</IonButton>
+							</>
+						) : (
+							<>
+								{callType === 'video' && (
+									<IonButton onClick={flipCamera} color="light" className="call-btn-circle">
+										<IonIcon icon={cameraOutline} />
+									</IonButton>
+								)}
+								<IonButton onClick={() => endCall(true)} color="danger" className="call-btn-circle">
+									<IonIcon icon={call} style={{ transform: 'rotate(135deg)' }} />
+								</IonButton>
+							</>
+						)}
 					</div>
 				</div>
 			)}
+
+			<Modal isOpen={openAiOptions} onClose={setOpenAiOptions} title="AI Tools">
+				<AiTools chatId={chatId} />
+			</Modal>
+			<Modal isOpen={openOptions} onClose={setOpenOptions} title="Chat Details">
+				<ChatOptions chat={chat} isLoading={isLoading} closeModal={() => setOpenOptions(false)} />
+			</Modal>
 		</IonPage>
 	);
 };

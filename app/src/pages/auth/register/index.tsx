@@ -1,16 +1,4 @@
-import {
-	IonButton,
-	IonButtons,
-	IonCard,
-	IonCardContent,
-	IonContent,
-	IonHeader,
-	IonIcon,
-	IonPage,
-	IonProgressBar,
-	IonToolbar,
-	useIonRouter,
-} from '@ionic/react';
+import { IonButton, IonContent, IonPage, IonProgressBar, IonText, useIonRouter } from '@ionic/react';
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { registerSchema } from '../../../validations-schemas/auth';
@@ -21,15 +9,14 @@ import { RegisterConfig } from '../../../validations-schemas/interfaces/user';
 import ImagePicker from '../../../components/ImagePicker';
 import { authStore } from '../../../store/auth';
 import Toast from '../../../components/ui/Toast';
-import Loading from '../../../components/Loading';
-import { arrowBack } from 'ionicons/icons';
 import Logo from '../../../assets/logo.png';
-import Title from '../../../components/ui/Title';
 import HidePassword from '../../../components/HidePassword';
 import Input from '../../../components/ui/Input';
+// import '../login/style.css';
 
 const Register: React.FC = () => {
 	const { logIn } = authStore((store: any) => store);
+	const router = useIonRouter();
 
 	const [showToast, setShowToast] = useState(false);
 	const [toastMessage, setToastMessage] = useState('');
@@ -57,108 +44,95 @@ const Register: React.FC = () => {
 		setValue('avatar', avatar);
 	};
 
-	const router = useIonRouter();
-
 	const onSubmit = async (data: any) => {
-		try {
-			mutate(data, {
-				onSuccess: (data: any) => {
-					if (data.avatar === undefined || data.avatar === ' ') {
-						data.avatar = '';
-					}
-					logIn({
-						token: data.token,
-						userId: data.userId,
-						avatar: data?.avatar,
-						username: data.username,
-					});
-					setToastMessage('Form submitted successfully!');
-					setShowToast(true);
-					router.push('/inbox', 'forward', 'replace');
-					// window.location.reload();
-				},
-				onError: (error) => {
-					setToastMessage('Could not create user. The username already exists.');
-					setShowToast(true);
-				},
-			});
-		} catch (error) {
-			console.log(error);
-		}
+		mutate(data, {
+			onSuccess: (data: any) => {
+				const avatar = data.avatar === undefined || data.avatar === ' ' ? '' : data.avatar;
+				logIn({
+					token: data.token,
+					userId: data.userId,
+					avatar: avatar,
+					username: data.username,
+				});
+				setToastMessage('Account created successfully!');
+				setShowToast(true);
+				router.push('/inbox', 'forward', 'replace');
+				setTimeout(() => window.location.reload(), 100);
+			},
+			onError: () => {
+				setToastMessage('Could not create account. Username might be taken.');
+				setShowToast(true);
+			},
+		});
 	};
 
 	return (
-		<IonPage>
-			<IonHeader>
-				<IonToolbar>
-					<IonButtons slot="start">
-						<IonButton routerLink="/login">
-							<IonIcon icon={arrowBack} size="medium"></IonIcon>
-						</IonButton>
-					</IonButtons>
-					<Title title="Create you account" className="title-bar" />
-				</IonToolbar>
-			</IonHeader>
-			<IonContent class="ion-padding">
-				<IonCard className="auth-card">
-					<img src={Logo} alt="logo"></img>
+		<IonPage className="auth-page">
+			<IonContent className="ion-padding modern-container bg-modern">
+				<div className="animate-in" style={{ marginTop: '2vh' }}>
+					<div className="auth-logo-container">
+						<img src={Logo} alt="logo" className="auth-logo" />
+					</div>
 
-					<IonCardContent>
-						{isLoading && <IonProgressBar type="indeterminate"></IonProgressBar>}
+					<div className="auth-header-text">
+						<IonText>
+							<h1>Join Aura</h1>
+						</IonText>
+						<IonText color="medium">
+							<p>Create your profile and start chatting</p>
+						</IonText>
+					</div>
+
+					<div className="auth-card glass-effect animate-in" style={{ padding: '24px' }}>
+						{isLoading && (
+							<IonProgressBar type="indeterminate" style={{ borderRadius: '10px', marginBottom: '20px' }} />
+						)}
+
 						<form onSubmit={handleSubmit(onSubmit)}>
 							<Input
-								label="Entrer Username"
-								register={register('username', { required: true })}
-								className="ion-margin-top"
-							></Input>
-							{errors.username && (
-								<div className="auth-error-box">
-									<p className="auth-error-text">{errors.username?.message}</p>
-								</div>
-							)}
+								label="Username"
+								register={register('username')}
+								className="modern-input"
+								placeholder="What should we call you?"
+							/>
+							{errors.username && <div className="field-error">{errors.username.message}</div>}
 
 							<Input
-								label="Entrer Phone"
-								register={register('phone', { required: true })}
-								className="ion-margin-top"
-							></Input>
-							{errors.phone && (
-								<div className="auth-error-box">
-									<p className="auth-error-text">{errors.phone?.message}</p>
-								</div>
-							)}
+								label="Phone Number"
+								register={register('phone')}
+								className="modern-input"
+								placeholder="+1 234 567 890"
+							/>
+							{errors.phone && <div className="field-error">{errors.phone.message}</div>}
 
 							<HidePassword register={register} />
-							{errors.password && (
-								<div className="auth-error-box">
-									<p className="auth-error-text">{errors.password?.message}</p>
-								</div>
-							)}
+							{errors.password && <div className="field-error">{errors.password.message}</div>}
 
-							<ImagePicker onChange={handleImage}></ImagePicker>
+							<div style={{ margin: '20px 0' }}>
+								<IonText style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '500' }}>
+									Choose an Avatar
+								</IonText>
+								<ImagePicker onChange={handleImage}></ImagePicker>
+							</div>
 
 							<IonButton
 								type="submit"
-								className="ion-margin-top submit-button"
 								expand="block"
+								className="auth-submit-btn"
 								disabled={isLoading}
-								color={isLoading ? 'medium' : 'primary'}
+								color="primary"
 							>
-								Sign up
+								{isLoading ? 'Creating account...' : 'Create Account'}
 							</IonButton>
 						</form>
-						<Toast showToast={showToast} message={toastMessage} setShowToast={setShowToast} isError={isError} />
-					</IonCardContent>
-					<IonButton
-						routerLink="/login"
-						expand="block"
-						// color="secondary"
-						fill="clear"
-						style={{ paddingInline: '1rem' }}
-					>
-						Login
-					</IonButton>
-				</IonCard>
+
+						<IonButton routerLink="/login" expand="block" fill="clear" className="auth-footer-btn">
+							Already have an account? Sign In
+						</IonButton>
+					</div>
+				</div>
+
+				<Toast showToast={showToast} message={toastMessage} setShowToast={setShowToast} isError={isError} />
 			</IonContent>
 		</IonPage>
 	);

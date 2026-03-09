@@ -1,127 +1,99 @@
-import { IonCard, IonAlert } from '@ionic/react';
+import { IonAlert, IonText } from '@ionic/react';
 import React, { useState } from 'react';
 import { authStore } from '../../../../store/auth';
 import { deleteMessage } from '../../../../services/chat';
 import { useMutation } from '@tanstack/react-query';
 import { useLongPress } from 'react-use';
-import { Tooltip as ReactTooltip } from 'react-tooltip';
-
 import './style.css';
 import Modal from '../../../../components/ui/Modal';
-import { set } from 'react-hook-form';
+import userDefaultAvatar from '../../../../assets/user.png';
 
 interface MessageConfig {
 	message?: any;
 	refetch?: any;
 	chatId?: string;
-	image?: string;
 }
 
-const MessageBox: React.FC<MessageConfig> = ({ message, refetch, chatId, image }) => {
+const MessageBox: React.FC<MessageConfig> = ({ message, chatId }) => {
 	const { userId } = authStore((store: any) => store);
-	const [timeOpen, setTimeOpen] = useState<boolean>(false);
 	const [openOptions, setOpenOptions] = useState<boolean>(false);
 	const [openImage, setOpenImage] = useState(false);
+
+	const isMine = userId === message.senderId._id;
 
 	const { mutate: mutateDeleteMessage } = useMutation({
 		mutationFn: ({ chatId, messageId }: any) => deleteMessage(chatId, messageId),
 	});
 
 	const handleDeleteMessage = (messageId: string) => {
-		mutateDeleteMessage(
-			{ chatId, messageId },
-			{
-				onSuccess: (res: any) => {
-					// refetch();
-				},
-				onError: (error: any) => {
-					console.log('error', error);
-				},
-			}
-		);
+		mutateDeleteMessage({ chatId, messageId });
 	};
 
-	const handleMessageOptions = () => {
-		setOpenOptions(true);
-	};
-
-	const toggleTime = () => {
-		setTimeOpen(!timeOpen);
-	};
-
-	const onLongPress = () => {
-		handleMessageOptions();
-	};
-
-	const defaultOptions = {
+	const longPressEvent = useLongPress(() => isMine && setOpenOptions(true), {
 		isPreventDefault: true,
-		delay: 300,
+		delay: 500,
+	});
+
+	const formatTime = (dateStr: string) => {
+		try {
+			const date = new Date(dateStr);
+			return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+		} catch (e) {
+			return '';
+		}
 	};
-	const longPressEvent = useLongPress(onLongPress, defaultOptions);
 
 	return (
-		<>
-			<div>
-				{timeOpen && <p className="timer-box">{message.createdAt}</p>}
-				<IonCard
-					data-tooltip-id="message-tooltip"
-					data-tooltip-content={message.createdAt}
-					className={userId === message.senderId._id ? 'userId-message' : 'sender-message'}
-					onClick={message.message && !message.image ? toggleTime : () => setOpenImage(true)}
-					{...longPressEvent}
-				>
-					{message.message && !message.image && (
-						<p
-							style={{
-								paddingLeft: '10px',
-								paddingRight: '10px',
-								color: 'var(--ion-color-light-contrast)',
-							}}
-						>
-							{message.message}
-						</p>
-					)}
-					{message.image && !message.message && (
-						<img src={message.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-					)}
-				</IonCard>
+		<div className={`message-bubble-row ${isMine ? 'mine' : 'theirs'}`}>
+			{!isMine && (
+				<img src={message.senderId.avatar || userDefaultAvatar} className="message-avatar-small" alt="Avatar" />
+			)}
 
-				{/* <ReactTooltip
-          id="message-tooltip"
-          place="left"
-          style={{
-            backgroundColor: "var(--ion-color-secondary)",
-            color: "white",
-            padding: "6px",
-            fontSize: "12px",
-            fontWeight: "bold",
-            boxShadow: "0 0 10px rgba(0, 0, 0, 0.1)",
-          }}
-        /> */}
+			<div
+				className={`message-bubble ${isMine ? 'mine' : 'theirs'}`}
+				{...(isMine ? longPressEvent : {})}
+				onClick={() => message.image && setOpenImage(true)}
+			>
+				{message.message && <p className="message-text">{message.message}</p>}
+
+				{message.image && <img src={message.image} alt="Sent" className="message-image" />}
+
+				<div className="message-time">{formatTime(message.createdAt)}</div>
 			</div>
 
 			<Modal isOpen={openImage} onClose={() => setOpenImage(false)}>
-				<img src={message.image} alt="" style={{ width: '100%' }} />
+				<div
+					style={{
+						padding: '20px',
+						display: 'flex',
+						justifyContent: 'center',
+						alignItems: 'center',
+						height: '100%',
+					}}
+				>
+					<img
+						src={message.image}
+						alt="Full size"
+						style={{ maxWidth: '100%', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.3)' }}
+					/>
+				</div>
 			</Modal>
 
-			{openOptions && message.senderId._id === userId && (
-				<IonAlert
-					isOpen={openOptions}
-					message="Are you sure you want to delete this message?"
-					buttons={[
-						'cancel',
-						{
-							text: 'Delete',
-							handler: () => {
-								handleDeleteMessage(message._id);
-							},
-						},
-					]}
-					header="Delete Message"
-					onDidDismiss={() => setOpenOptions(false)}
-				></IonAlert>
-			)}
-		</>
+			<IonAlert
+				isOpen={openOptions}
+				header="Delete Message"
+				message="Are you sure you want to delete this message for everyone?"
+				buttons={[
+					{ text: 'Cancel', role: 'cancel' },
+					{
+						text: 'Delete',
+						role: 'destructive',
+						handler: () => handleDeleteMessage(message._id),
+					},
+				]}
+				onDidDismiss={() => setOpenOptions(false)}
+			/>
+		</div>
 	);
 };
 

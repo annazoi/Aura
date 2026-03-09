@@ -1,4 +1,4 @@
-import { IonAlert, IonCardContent, IonContent, IonInput, useIonRouter } from '@ionic/react';
+import { IonAlert, IonCardContent, IonContent, IonInput, IonText, useIonRouter } from '@ionic/react';
 import { useMutation } from '@tanstack/react-query';
 import { FC, useState } from 'react';
 import { createChat } from '../../../../services/chat';
@@ -33,23 +33,26 @@ const CreateGroup: FC<GroupProps> = ({ closeModal, setOpenGroupModal, openGroupM
 	};
 
 	const createGroupChat = () => {
-		if (selectedUsers.length > 1 && name !== '') {
+		if (selectedUsers.length > 1 && name.trim() !== '') {
 			mutate(
 				{ name, type: 'group', avatar, members: [...selectedUsers, userId] },
 				{
 					onSuccess: (res: any) => {
 						setOpenGroupModal(false);
 						closeModal();
-						console.log(res);
-						router.push(`/chat/${res.chat._id}`);
+						router.push(`/chat/${res.chat._id}`, 'forward');
 					},
-				}
+					onError: () => {
+						setErrorMessage('Could not create group. Please try again.');
+						setOpenAlert(true);
+					},
+				},
 			);
 		} else if (selectedUsers.length <= 1) {
 			setErrorMessage('Please select at least 2 users to create a group chat.');
 			setOpenAlert(true);
-		} else if (name === '') {
-			setErrorMessage('Please selecte group name.');
+		} else if (name.trim() === '') {
+			setErrorMessage('Please enter a group name.');
 			setOpenAlert(true);
 		}
 	};
@@ -67,58 +70,63 @@ const CreateGroup: FC<GroupProps> = ({ closeModal, setOpenGroupModal, openGroupM
 			isOpen={openGroupModal}
 			onClose={() => setOpenGroupModal(false)}
 			onClick={createGroupChat}
-			title="New Group"
+			title="New Group Chat"
 		>
-			<IonContent className="modal-bg">
-				<IonCardContent>
-					<ImagePicker onChange={handleImage} value={avatar} text="You can add a group image."></ImagePicker>
+			<IonContent className="bg-modern">
+				<IonCardContent className="animate-in">
+					<div className="group-avatar-picker">
+						<ImagePicker onChange={handleImage} value={avatar} text="Add Group Avatar"></ImagePicker>
+					</div>
+
 					<Loading showLoading={isLoading} />
-					<div>
+
+					<div style={{ padding: '0 8px' }}>
+						<IonText
+							color="medium"
+							style={{
+								fontSize: '12px',
+								fontWeight: 'bold',
+								textTransform: 'uppercase',
+								letterSpacing: '1px',
+								marginBottom: '8px',
+								display: 'block',
+							}}
+						>
+							Group Details
+						</IonText>
 						<IonInput
 							labelPlacement="floating"
-							label="Enter group name"
+							label="Group Name"
+							placeholder="Dream Team 🚀"
 							value={name}
-							onIonChange={(e: any) => {
-								setName(e.detail.value);
-							}}
-							className="input-container group-input-container"
+							onIonChange={(e: any) => setName(e.detail.value)}
+							className="group-input-container modern-input"
 						></IonInput>
-					</div>
-					<SearchUsers
-						type="group"
-						placeholder="Search Users..."
-						handleSelectUser={handleSelectUser}
-						selectedUsers={selectedUsers}
-					/>
-				</IonCardContent>
 
-				{/* 
-        {filteredUser.map((user: any, index: any) => (
-          <div key={index}>
-            {user._id !== userId && (
-              <IonCard>
-                <IonCardContent className="ion-no-padding">
-                  <IonItem lines="none">
-                    <IonAvatar slot="start">
-                      <IonImg
-                        src={user.avatar ? user.avatar : userDefaultAvatar}
-                      />
-                    </IonAvatar>
-                    <IonCheckbox
-                      labelPlacement="start"
-                      checked={selectedUser.includes(user._id)}
-                      onIonChange={(e) => handleSelectUser(e, user._id)}
-                      value={user._id}
-                    >
-                      <IonLabel>{user.username}</IonLabel>
-                    </IonCheckbox>
-                  </IonItem>
-                </IonCardContent>
-              </IonCard>
-            )}
-          </div>
-        ))} */}
+						<IonText
+							color="medium"
+							style={{
+								fontSize: '12px',
+								fontWeight: 'bold',
+								textTransform: 'uppercase',
+								letterSpacing: '1px',
+								marginBottom: '8px',
+								display: 'block',
+								marginTop: '16px',
+							}}
+						>
+							Invite Members
+						</IonText>
+						<SearchUsers
+							type="group"
+							placeholder="Search Users..."
+							handleSelectUser={handleSelectUser}
+							selectedUsers={selectedUsers}
+						/>
+					</div>
+				</IonCardContent>
 			</IonContent>
+
 			<IonAlert
 				isOpen={openAlert}
 				message={errorMessage}

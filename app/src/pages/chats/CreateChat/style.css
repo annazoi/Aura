@@ -1,9 +1,45 @@
-.md.new-chat-container ion-button {
-	margin-top: 1rem;
+.new-chat-container {
+	padding: 16px;
 }
 
-.new-chat-container ion-card {
-	margin: 0;
-	margin: 0.15rem;
-	margin-top: 0.5rem;
+.create-group-btn {
+	--border-radius: 12px;
+	margin-bottom: 20px;
+	font-weight: 600;
+	height: 48px;
+}
+
+.user-search-result {
+	background: var(--ion-card-background);
+	border-radius: 16px;
+	margin-bottom: 10px;
+	border: 1px solid var(--ion-border-color);
+	transition:
+		transform 0.2s ease,
+		box-shadow 0.2s ease;
+}
+
+.user-search-result:active {
+	transform: scale(0.98);
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.user-item {
+	--padding-start: 12px;
+	--inner-padding-end: 12px;
+	--background: transparent;
+}
+
+.group-avatar-picker {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	margin-bottom: 24px;
+}
+
+.group-input-container {
+	--background: var(--ion-color-light);
+	--border-radius: 12px;
+	--padding-start: 16px;
+	margin-bottom: 20px;
 }

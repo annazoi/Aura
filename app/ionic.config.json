@@ -1,7 +1,7 @@
 {
-  "name": "mesge",
-  "integrations": {
-    "capacitor": {}
-  },
-  "type": "react-vite"
+	"name": "aura",
+	"integrations": {
+		"capacitor": {}
+	},
+	"type": "react-vite"
 }
